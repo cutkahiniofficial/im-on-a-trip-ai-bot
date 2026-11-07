@@ -33,14 +33,16 @@ const OPENROUTER_MODELS = (process.env.OPENROUTER_MODELS
 if (process.env.OPENROUTER_MODEL && !OPENROUTER_MODELS.includes(process.env.OPENROUTER_MODEL)) {
   OPENROUTER_MODELS.unshift(process.env.OPENROUTER_MODEL);
 }
-// Groq — free tier, alada limit, tai age try hobe:
-// llama-3.1-8b-instant: 14,400 request/day, 500K token/day (free, Oct 2026)
-// llama-3.3-70b-versatile: 1,000 request/day, 100K token/day (free, Oct 2026)
-// Choto model age — 2-3 line reply-er jonno jothesto, ar limit onek beshi.
+// Groq — free tier, alada limit, tai age try hobe.
+// SOTORKO: llama-3.1-8b-instant ar llama-3.3-70b-versatile Groq 2026-08-16-e
+// Free/Developer tier theke soriye diyeche (ekhon Enterprise only) — tai
+// 2026-11-07-e oi duita model-e 404 esechilo. Groq-er official replacement:
+// openai/gpt-oss-20b age (choto, 1000 tps), tarpor openai/gpt-oss-120b.
+// Duita-i Production model, Groq docs (console.groq.com/docs/models) 2026-11-07-e verify kora.
 // Env-e GROQ_MODELS diye bodlano jay.
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODELS = (process.env.GROQ_MODELS
-  || 'llama-3.1-8b-instant,llama-3.3-70b-versatile')
+  || 'openai/gpt-oss-20b,openai/gpt-oss-120b')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || '';
 const PAGE_ID = process.env.PAGE_ID || '400909476443586';
@@ -214,7 +216,7 @@ async function askGemini(userText, isComment) {
   return null;
 }
 
-// Main AI: Groq age (free, limit sobcheye beshi — 8b model-e 14,400/day),
+// Main AI: Groq age (free, alada limit — gpt-oss-20b/120b),
 // tarpor OpenRouter, tarpor Gemini backup.
 // Gemini free tier-e gemini-3.8-flash-er daily limit matro 20 request —
 // tai Gemini primary thakle ekdin-ei limit sesh hoye jeto. Sob fail korle null/LIMIT.
