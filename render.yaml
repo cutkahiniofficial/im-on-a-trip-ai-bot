@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: im-on-a-trip-ai-bot
+    env: node
+    plan: free
+    buildCommand: npm install --omit=dev || true
+    startCommand: node server.js
+    envVars:
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: PAGE_ID
+        value: 61564997620244
+      - key: GRAPH_API_VERSION
+        value: v25.0
+      # Set these three in the Render dashboard (never in this file):
+      # GEMINI_API_KEY, PAGE_ACCESS_TOKEN, VERIFY_TOKEN, APP_SECRET (optional)

@@ -1,0 +1,1 @@
+{"description":"Facebook AI chatbot for Im On A Trip — Gemini + Messenger + comment reply","engines":{"node":">=18"},"main":"server.js","name":"im-on-a-trip-ai-bot","scripts":{"start":"node server.js"},"version":"1.0.0"}
