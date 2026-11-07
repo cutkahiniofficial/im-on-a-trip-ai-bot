@@ -7,9 +7,9 @@ services:
     startCommand: node server.js
     envVars:
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.8-flash
       - key: PAGE_ID
-        value: 61564997620244
+        value: 400909476443586
       - key: GRAPH_API_VERSION
         value: v25.0
       # Set these three in the Render dashboard (never in this file):

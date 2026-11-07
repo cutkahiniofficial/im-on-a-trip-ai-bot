@@ -1,12 +1,12 @@
 // I'm On A Trip — Facebook AI Chatbot
 // Gemini (Google AI Studio) + Messenger auto-reply + public comment reply
-// Page: I'm On A Trip (Page ID 61564997620244) — vlog + cinematic travel video
+// Page: I'm On A Trip (Page ID 400909476443586) — vlog + cinematic travel video
 // No npm dependencies — only Node.js built-ins. Node 18+ required.
 //
 // Env vars (see .env.example):
 //   GEMINI_API_KEY, PAGE_ACCESS_TOKEN, PAGE_ID, VERIFY_TOKEN,
 //   APP_SECRET (optional, for webhook signature check),
-//   GEMINI_MODEL (default gemini-2.5-flash), GRAPH_API_VERSION (default v25.0), PORT
+//   GEMINI_MODEL (default gemini-3.8-flash), GRAPH_API_VERSION (default v25.0), PORT
 //
 // Endpoints:
 //   GET  /          -> health check
@@ -22,9 +22,9 @@ const { URL } = require('node:url');
 
 const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || '';
-const PAGE_ID = process.env.PAGE_ID || '61564997620244';
+const PAGE_ID = process.env.PAGE_ID || '400909476443586';
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'shanto-bot-verify';
 const APP_SECRET = process.env.APP_SECRET || '';
 const GRAPH_API_VERSION = process.env.GRAPH_API_VERSION || 'v25.0';
@@ -50,30 +50,42 @@ function alreadySeen(id) {
   return false;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function askGemini(userText, isComment) {
   if (!GEMINI_API_KEY) return null;
   const prompt = isComment
     ? `${SYSTEM_PROMPT}\n\nEta ekta public Facebook comment. 1-2 line-e, bondhu-sulov bhabe reply dao. Beshi details lagle bolo inbox-e message korte.\n\nComment: ${userText}`
     : `${SYSTEM_PROMPT}\n\nUser-er message: ${userText}`;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    console.error('Gemini error', res.status, t.slice(0, 500));
-    // 429 = free-tier limit sesh — user-ke polite fallback dao
-    if (res.status === 429) return 'LIMIT';
-    return null;
+  // Retry: gemini-3.8-flash majhe majhe 503 (overloaded) dey — 3 bar try koro,
+  // tarpor-o na hole fallback. 429 = free-tier limit, retry kore lav nai.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('').trim();
+        return text || null;
+      }
+      const t = await res.text().catch(() => '');
+      console.error('Gemini error', res.status, `(try ${attempt}/3)`, t.slice(0, 500));
+      if (res.status === 429) return 'LIMIT'; // 429 = free-tier limit sesh
+      if (res.status !== 503 && res.status !== 500 && res.status !== 502) return null;
+      if (attempt < 3) await sleep(attempt * 2000); // 2s, tarpor 4s
+    } catch (e) {
+      console.error('Gemini fetch failed', `(try ${attempt}/3)`, e.message);
+      if (attempt < 3) await sleep(attempt * 2000);
+    }
   }
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('').trim();
-  return text || null;
+  return null;
 }
 
 async function graphPost(path, body) {
