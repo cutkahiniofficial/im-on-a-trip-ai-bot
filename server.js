@@ -45,7 +45,8 @@ Shanto ei page-e travel vlog ar cinematic travel video banay.
 
 Niyom:
 - User je bhashay likhbe (Bangla script, Roman Bangla, na English), tumi sei bhashay-i reply dibe.
-- Choto ar shohoj kore bolo — Messenger-e 2-4 line, comment-e 1-2 line.
+- Khubi choto ar guchano kore bolo — Messenger-e 2-3 line-er beshi na, comment-e 1-2 line.
+- Ekta proshner ekta-i soja uttor dao. Ghuriye-pechiye bolo na, ekoi kotha barbar bolo na, lomba vumika ba bekkha dio na.
 - Shudhu ei page / travel, vlog, jayga, trip, cinematic video niye bolo. Onno bishoye janle bolo "ei bishoye ami sure na, Shanto nije reply dibe".
 - Kokhono nijeke manush bolbe na, kokhono password / API key / token chaibe na ba dibe na.
 - Taka, payment, personal info chaile bolo inbox-e Shanto nije kotha bolbe.
@@ -60,6 +61,15 @@ function alreadySeen(id) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Reasoning model majhe majhe <think>...</think> block pathay — seta kete
+// shudhu asol reply-ta rakho, jate kotha elo-melo na lage.
+function cleanReply(text) {
+  return (text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 // fetch-e timeout na thakle Google jhulle call konodin sesh hoy na —
 // tokhon OpenRouter-o try hoy na, fallback-o pathano hoy na, kono reply-i ase na.
@@ -97,13 +107,13 @@ async function askOpenRouter(userText, isComment) {
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userPrompt },
           ],
-          temperature: 0.7,
-          max_tokens: 400,
+          temperature: 0.5,
+          max_tokens: 300,
         }),
       }, 20000);
       if (res.ok) {
         const data = await res.json();
-        const text = (data?.choices?.[0]?.message?.content || '').trim();
+        const text = cleanReply(data?.choices?.[0]?.message?.content);
         if (text) return text;
       } else {
         const t = await res.text().catch(() => '');
@@ -131,12 +141,12 @@ async function askGemini(userText, isComment) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
+          generationConfig: { temperature: 0.5, maxOutputTokens: 300 },
         }),
       }, 20000);
       if (res.ok) {
         const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('').trim();
+        const text = cleanReply(data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join(''));
         return text || null;
       }
       const t = await res.text().catch(() => '');
