@@ -4,7 +4,8 @@
 // No npm dependencies — only Node.js built-ins. Node 18+ required.
 //
 // Env vars (see .env.example):
-//   GEMINI_API_KEY, PAGE_ACCESS_TOKEN, PAGE_ID, VERIFY_TOKEN,
+//   GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY,
+//   PAGE_ACCESS_TOKEN, PAGE_ID, VERIFY_TOKEN,
 //   APP_SECRET (optional, for webhook signature check),
 //   GEMINI_MODEL (default gemini-3.8-flash), GRAPH_API_VERSION (default v25.0), PORT
 //
@@ -32,6 +33,15 @@ const OPENROUTER_MODELS = (process.env.OPENROUTER_MODELS
 if (process.env.OPENROUTER_MODEL && !OPENROUTER_MODELS.includes(process.env.OPENROUTER_MODEL)) {
   OPENROUTER_MODELS.unshift(process.env.OPENROUTER_MODEL);
 }
+// Groq — free tier, alada limit, tai age try hobe:
+// llama-3.1-8b-instant: 14,400 request/day, 500K token/day (free, Oct 2026)
+// llama-3.3-70b-versatile: 1,000 request/day, 100K token/day (free, Oct 2026)
+// Choto model age — 2-3 line reply-er jonno jothesto, ar limit onek beshi.
+// Env-e GROQ_MODELS diye bodlano jay.
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODELS = (process.env.GROQ_MODELS
+  || 'llama-3.1-8b-instant,llama-3.3-70b-versatile')
+  .split(',').map((s) => s.trim()).filter(Boolean);
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || '';
 const PAGE_ID = process.env.PAGE_ID || '400909476443586';
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'shanto-bot-verify';
@@ -128,6 +138,46 @@ async function askOpenRouter(userText, isComment) {
   return null;
 }
 
+// Groq — OpenAI-compatible API, tai OpenRouter-er motoi call.
+// GROQ_API_KEY na thakle skip korbe (null), bot ager motoi cholbe.
+async function askGroq(userText, isComment) {
+  if (!GROQ_API_KEY) return null;
+  const userPrompt = isComment
+    ? `Eta ekta public Facebook comment. 1-2 line-e, bondhu-sulov bhabe reply dao. Beshi details lagle bolo inbox-e message korte.\n\nComment: ${userText}`
+    : `User-er message: ${userText}`;
+  for (const model of GROQ_MODELS) {
+    try {
+      const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.5,
+          max_tokens: 300,
+        }),
+      }, 20000);
+      if (res.ok) {
+        const data = await res.json();
+        const text = cleanReply(data?.choices?.[0]?.message?.content);
+        if (text) return text;
+      } else {
+        const t = await res.text().catch(() => '');
+        console.error('Groq error', res.status, `(${model})`, t.slice(0, 300));
+      }
+    } catch (e) {
+      console.error('Groq fetch failed', `(${model})`, e.message);
+    }
+  }
+  return null;
+}
+
 async function askGemini(userText, isComment) {
   if (!GEMINI_API_KEY) return null;
   const prompt = isComment
@@ -164,10 +214,13 @@ async function askGemini(userText, isComment) {
   return null;
 }
 
-// Main AI: OpenRouter age (free Llama, limit beshi), Gemini backup.
+// Main AI: Groq age (free, limit sobcheye beshi — 8b model-e 14,400/day),
+// tarpor OpenRouter, tarpor Gemini backup.
 // Gemini free tier-e gemini-3.8-flash-er daily limit matro 20 request —
-// tai Gemini primary thakle ekdin-ei limit sesh hoye jeto. Duitai fail korle null/LIMIT.
+// tai Gemini primary thakle ekdin-ei limit sesh hoye jeto. Sob fail korle null/LIMIT.
 async function askAI(userText, isComment) {
+  const q = await askGroq(userText, isComment);
+  if (q) return q;
   const o = await askOpenRouter(userText, isComment);
   if (o) return o;
   const g = await askGemini(userText, isComment);
