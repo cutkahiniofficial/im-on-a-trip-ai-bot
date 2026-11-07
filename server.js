@@ -24,7 +24,14 @@ const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
+// Free model ek ek somoy bodle jay (Llama 3.3 :free ar free nai) — tai chain:
+// ekta na cholle porer-ta try korbe. Env-e OPENROUTER_MODELS diye bodlano jay.
+const OPENROUTER_MODELS = (process.env.OPENROUTER_MODELS
+  || 'google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-31b-it:free')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+if (process.env.OPENROUTER_MODEL && !OPENROUTER_MODELS.includes(process.env.OPENROUTER_MODEL)) {
+  OPENROUTER_MODELS.unshift(process.env.OPENROUTER_MODEL);
+}
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || '';
 const PAGE_ID = process.env.PAGE_ID || '400909476443586';
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'shanto-bot-verify';
@@ -67,13 +74,14 @@ async function fetchWithTimeout(url, options, ms) {
   }
 }
 
-// Backup AI: OpenRouter (free model) — Gemini 3 bar fail korle tobei use hobe.
+// Backup AI: OpenRouter free models (chain) — Gemini fail korle ba quota sesh hole use hobe.
+// Prottek model 1 bar kore try kore; kono-ta na cholle porer model.
 async function askOpenRouter(userText, isComment) {
   if (!OPENROUTER_API_KEY) return null;
   const userPrompt = isComment
     ? `Eta ekta public Facebook comment. 1-2 line-e, bondhu-sulov bhabe reply dao. Beshi details lagle bolo inbox-e message korte.\n\nComment: ${userText}`
     : `User-er message: ${userText}`;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (const model of OPENROUTER_MODELS) {
     try {
       const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -84,7 +92,7 @@ async function askOpenRouter(userText, isComment) {
           'X-Title': "I'm On A Trip AI bot",
         },
         body: JSON.stringify({
-          model: OPENROUTER_MODEL,
+          model,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userPrompt },
@@ -96,14 +104,13 @@ async function askOpenRouter(userText, isComment) {
       if (res.ok) {
         const data = await res.json();
         const text = (data?.choices?.[0]?.message?.content || '').trim();
-        return text || null;
+        if (text) return text;
+      } else {
+        const t = await res.text().catch(() => '');
+        console.error('OpenRouter error', res.status, `(${model})`, t.slice(0, 300));
       }
-      const t = await res.text().catch(() => '');
-      console.error('OpenRouter error', res.status, `(try ${attempt}/2)`, t.slice(0, 300));
-      if (attempt < 2) await sleep(2000);
     } catch (e) {
-      console.error('OpenRouter fetch failed', `(try ${attempt}/2)`, e.message);
-      if (attempt < 2) await sleep(2000);
+      console.error('OpenRouter fetch failed', `(${model})`, e.message);
     }
   }
   return null;
