@@ -54,6 +54,19 @@ function alreadySeen(id) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// fetch-e timeout na thakle Google jhulle call konodin sesh hoy na —
+// tokhon OpenRouter-o try hoy na, fallback-o pathano hoy na, kono reply-i ase na.
+// Tai prottek AI/Graph call-e 20s (Graph-e 15s) timeout.
+async function fetchWithTimeout(url, options, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Backup AI: OpenRouter (free model) — Gemini 3 bar fail korle tobei use hobe.
 async function askOpenRouter(userText, isComment) {
   if (!OPENROUTER_API_KEY) return null;
@@ -62,7 +75,7 @@ async function askOpenRouter(userText, isComment) {
     : `User-er message: ${userText}`;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,7 +92,7 @@ async function askOpenRouter(userText, isComment) {
           temperature: 0.7,
           max_tokens: 400,
         }),
-      });
+      }, 20000);
       if (res.ok) {
         const data = await res.json();
         const text = (data?.choices?.[0]?.message?.content || '').trim();
@@ -106,14 +119,14 @@ async function askGemini(userText, isComment) {
   // tarpor-o na hole fallback. 429 = free-tier limit, retry kore lav nai.
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
         }),
-      });
+      }, 20000);
       if (res.ok) {
         const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('').trim();
@@ -146,11 +159,11 @@ async function graphPost(path, body) {
     console.error('PAGE_ACCESS_TOKEN missing — reply pathabo na');
     return false;
   }
-  const res = await fetch(`${GRAPH}${path}?access_token=${encodeURIComponent(PAGE_ACCESS_TOKEN)}`, {
+  const res = await fetchWithTimeout(`${GRAPH}${path}?access_token=${encodeURIComponent(PAGE_ACCESS_TOKEN)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, 15000);
   if (!res.ok) console.error('Graph error', res.status, (await res.text()).slice(0, 500));
   return res.ok;
 }
