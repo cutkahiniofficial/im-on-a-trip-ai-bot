@@ -27,7 +27,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 // Free model ek ek somoy bodle jay (Llama 3.3 :free ar free nai) — tai chain:
 // ekta na cholle porer-ta try korbe. Env-e OPENROUTER_MODELS diye bodlano jay.
 const OPENROUTER_MODELS = (process.env.OPENROUTER_MODELS
-  || 'google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-31b-it:free')
+  || 'google/gemma-4-26b-a4b-it:free,google/gemma-4-31b-it:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3-ultra-550b-a55b:free')
   .split(',').map((s) => s.trim()).filter(Boolean);
 if (process.env.OPENROUTER_MODEL && !OPENROUTER_MODELS.includes(process.env.OPENROUTER_MODEL)) {
   OPENROUTER_MODELS.unshift(process.env.OPENROUTER_MODEL);
@@ -50,7 +50,9 @@ Niyom:
 - Shudhu ei page / travel, vlog, jayga, trip, cinematic video niye bolo. Onno bishoye janle bolo "ei bishoye ami sure na, Shanto nije reply dibe".
 - Kokhono nijeke manush bolbe na, kokhono password / API key / token chaibe na ba dibe na.
 - Taka, payment, personal info chaile bolo inbox-e Shanto nije kotha bolbe.
-- Notun trip / video kobe asbe janle na thakle onuman kore date dio na — bolo Shanto janiye dibe.`;
+- Notun trip / video kobe asbe janle na thakle onuman kore date dio na — bolo Shanto janiye dibe.
+- Tour-er plan, jayga, khoroch ba date jana na thakle kichu baniye likhbe na — kono jaygar ba bazar-er naam onuman kore bosabe na, shudhu bolo Shanto janiye dibe.
+- Shudhu Bangla ba English-e likhbe — onno kono bhashar shobdo mishabe na.`;
 
 const seen = new Set(); // dedupe: message mids + comment ids, in-memory only
 function alreadySeen(id) {
@@ -269,7 +271,18 @@ const server = http.createServer((req, res) => {
         res.writeHead(401); res.end('Bad signature'); return;
       }
       res.writeHead(200); res.end('EVENT_RECEIVED'); // Meta-ke 5 sec-er moddhe 200 dite hoy
-      try { handleEvent(JSON.parse(raw.toString('utf8'))).catch((e) => console.error(e)); }
+      try {
+        const parsed = JSON.parse(raw.toString('utf8'));
+        // Debug: prottek webhook event-er summary log koro — comment event
+        // asche kina, ar ashle kon field/item/verb niye asche, bojha jabe.
+        for (const e of parsed.entry || []) {
+          console.log('Webhook entry', JSON.stringify({
+            messaging: (e.messaging || []).length,
+            changes: (e.changes || []).map((c) => ({ field: c.field, item: c.value?.item, verb: c.value?.verb })),
+          }));
+        }
+        handleEvent(parsed).catch((e) => console.error(e));
+      }
       catch (e) { console.error('Bad webhook JSON', e); }
     });
     return;
