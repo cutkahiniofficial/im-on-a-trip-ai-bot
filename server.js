@@ -23,6 +23,8 @@ const { URL } = require('node:url');
 const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || '';
 const PAGE_ID = process.env.PAGE_ID || '400909476443586';
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'shanto-bot-verify';
@@ -51,6 +53,48 @@ function alreadySeen(id) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Backup AI: OpenRouter (free model) — Gemini 3 bar fail korle tobei use hobe.
+async function askOpenRouter(userText, isComment) {
+  if (!OPENROUTER_API_KEY) return null;
+  const userPrompt = isComment
+    ? `Eta ekta public Facebook comment. 1-2 line-e, bondhu-sulov bhabe reply dao. Beshi details lagle bolo inbox-e message korte.\n\nComment: ${userText}`
+    : `User-er message: ${userText}`;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://im-on-a-trip-ai-bot.onrender.com',
+          'X-Title': "I'm On A Trip AI bot",
+        },
+        body: JSON.stringify({
+          model: OPENROUTER_MODEL,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 400,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = (data?.choices?.[0]?.message?.content || '').trim();
+        return text || null;
+      }
+      const t = await res.text().catch(() => '');
+      console.error('OpenRouter error', res.status, `(try ${attempt}/2)`, t.slice(0, 300));
+      if (attempt < 2) await sleep(2000);
+    } catch (e) {
+      console.error('OpenRouter fetch failed', `(try ${attempt}/2)`, e.message);
+      if (attempt < 2) await sleep(2000);
+    }
+  }
+  return null;
+}
 
 async function askGemini(userText, isComment) {
   if (!GEMINI_API_KEY) return null;
@@ -86,6 +130,15 @@ async function askGemini(userText, isComment) {
     }
   }
   return null;
+}
+
+// Main AI: Gemini age, fail korle OpenRouter backup. Duitai fail korle null/LIMIT.
+async function askAI(userText, isComment) {
+  const g = await askGemini(userText, isComment);
+  if (g && g !== 'LIMIT') return g;
+  const o = await askOpenRouter(userText, isComment);
+  if (o) return o;
+  return g; // 'LIMIT' (Gemini free-tier limit) ba null
 }
 
 async function graphPost(path, body) {
@@ -135,7 +188,7 @@ async function handleEvent(body) {
       const text = (msg.text || '').trim();
       if (!text) continue;
       console.log('Messenger from', senderId, ':', text.slice(0, 120));
-      let reply = await askGemini(text, false);
+      let reply = await askAI(text, false);
       if (reply === 'LIMIT') reply = 'Ekhon onek message ashtese, ektu pore abar likho — ami reply dibo. Dhonnobad!';
       if (!reply) reply = 'Dhonnobad message korar jonno! Tomar proshno-ta peyechi, Shanto nijeo dekhe reply dibe.';
       await replyMessenger(senderId, reply.slice(0, 1900));
@@ -149,7 +202,7 @@ async function handleEvent(body) {
       const text = (v.message || '').trim();
       if (!text) continue;
       console.log('Comment', v.comment_id, ':', text.slice(0, 120));
-      let reply = await askGemini(text, true);
+      let reply = await askAI(text, true);
       if (reply === 'LIMIT') reply = 'Dhonnobad! Ekhon onek comment ashtese, inbox-e message korle details-e reply dibo.';
       if (!reply) reply = 'Dhonnobad comment korar jonno! Details jante inbox-e message koro.';
       await replyComment(v.comment_id, reply.slice(0, 600));
