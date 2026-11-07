@@ -145,13 +145,14 @@ async function askGemini(userText, isComment) {
   return null;
 }
 
-// Main AI: Gemini age, fail korle OpenRouter backup. Duitai fail korle null/LIMIT.
+// Main AI: OpenRouter age (free Llama, limit beshi), Gemini backup.
+// Gemini free tier-e gemini-3.8-flash-er daily limit matro 20 request —
+// tai Gemini primary thakle ekdin-ei limit sesh hoye jeto. Duitai fail korle null/LIMIT.
 async function askAI(userText, isComment) {
-  const g = await askGemini(userText, isComment);
-  if (g && g !== 'LIMIT') return g;
   const o = await askOpenRouter(userText, isComment);
   if (o) return o;
-  return g; // 'LIMIT' (Gemini free-tier limit) ba null
+  const g = await askGemini(userText, isComment);
+  return g; // asol reply, 'LIMIT' (Gemini free-tier limit) ba null
 }
 
 async function graphPost(path, body) {
